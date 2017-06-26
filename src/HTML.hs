@@ -55,7 +55,12 @@ template title body =
             ]
       style_ $
         "body { font-family: 'Ubuntu', sans-serif; }\
-        \.navbar { margin-bottom: 20px; }"
+        \.navbar { margin-bottom: 20px; }\
+        \html, body, #map {\
+        \  margin: 0;\
+        \  padding: 0;\
+        \  height: 100%;\
+        \}"
       script_ [ src_ "https://code.jquery.com/jquery-3.1.1.slim.min.js"
               , crossorigin_ "anonymous"
               ] ("" :: T.Text)

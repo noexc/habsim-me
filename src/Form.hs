@@ -3,40 +3,34 @@ module Form where
 
 import Data.HABSim.Types
 import qualified Data.Text as T
-import Data.Time
 import Data.Time.LocalTime (utc)
 import Lucid
 import Lucid.Base
 import Text.Digestive
 
-import Debug.Trace
-
--- TODO: Would like to use better types here, but d-f stringRead seems to hate
--- it.
-data SimForm =
-  SimForm { fLat :: Double
-          , fLon :: Double
-          , fTime :: UTCTime
-          , fAscentRate :: Double
-          , fBurstVolume :: Double
-          , fInitialFillVolume :: Double
-          , fParachuteCoeffDrag :: Double
-          , fParachuteArea :: Double
-          , fPackageCoeffDrag :: Double
-          } deriving (Eq, Show)
+import Types
 
 simForm :: Monad m => Form T.Text m SimForm
 simForm =
   SimForm
   <$> "lat" .: stringRead "Invalid latitude" Nothing
   <*> "lon" .: stringRead "Invalid longitude" Nothing
+  <*> "alt" .: stringRead "Invalid altitude" Nothing
   <*> "time" .: utcTimeFormlet "%F" "%T" utc Nothing
+  <*> "mass" .: stringRead "Invalid mass" Nothing
   <*> "ascent_rate" .: stringRead "Invalid ascent rate" Nothing
   <*> "burst_volume" .: stringRead "Invalid burst volume" Nothing
   <*> "initial_fill_volume" .: stringRead "Invalid initial fill volume" Nothing
+  <*> "balloon_coeff_drag" .: stringRead "Invalid balloon coefficient of drag" Nothing
   <*> "parachute_coeff_drag" .: stringRead "Invalid parachute coefficient of drag" Nothing
   <*> "parachute_area" .: stringRead "Invalid parachute area" Nothing
   <*> "package_coeff_drag" .: stringRead "Invalid package coefficient of drag" Nothing
+  <*> "grib_url" .: gribUrlCheck
+  where
+    gribUrlCheck =
+      check
+      "Must start with 'http://nomads.ncep.noaa.gov/'"
+      ("http://nomads.ncep.noaa.gov/" `T.isPrefixOf`) $ text Nothing
 
 formError :: [T.Text] -> Html ()
 formError errors =
@@ -49,7 +43,6 @@ formError errors =
 
 formHtml :: View T.Text -> Html ()
 formHtml view = do
-  --error (show view)
   form_ [ action_ "/sim", method_ "POST" ] $ do
     formError (childErrors "time.date" view)
     input_ [ type_ "hidden"
@@ -70,6 +63,7 @@ formHtml view = do
       "You can click on the map below to place a pin."
     formError (errors "lat" view)
     formError (errors "lon" view)
+    formError (errors "alt" view)
     div_ [ id_ "map", style_ "width: 100%; height: 330px;" ] ""
     input_ [ type_ "text"
            , name_ "sim.lat"
@@ -79,11 +73,23 @@ formHtml view = do
            , name_ "sim.lon"
            , id_ "sim-lon"
            , value_ (fieldInputText "lon" view) ]
+    p_ "From what altitude will you be launching?"
+    input_ [ type_ "text"
+           , name_ "sim.alt"
+           , id_ "sim-alt"
+           , value_ (fieldInputText "alt" view) ]
     hr_ []
     p_ "Gotcha. Now tell us a little about your balloon."
+    formError (errors "mass" view)
     formError (errors "ascent_rate" view)
     formError (errors "burst_volume" view)
     formError (errors "initial_fill_volume" view)
+    formError (errors "balloon_coeff_drag" view)
+    p_ "What is its mass (in kilograms)?"
+    input_ [ type_ "text"
+           , name_ "sim.mass"
+           , id_ "sim-mass"
+           , value_ (fieldInputText "mass" view) ]
     p_ "What is its ascent rate (in meters per second)?"
     input_ [ type_ "text"
            , name_ "sim.ascent_rate"
@@ -99,6 +105,11 @@ formHtml view = do
            , name_ "sim.initial_fill_volume"
            , id_ "sim-initial_fill_volume"
            , value_ (fieldInputText "initial_fill_volume" view) ]
+    p_ "What is its coefficient of drag?"
+    input_ [ type_ "text"
+           , name_ "sim.balloon_coeff_drag"
+           , id_ "sim-balloon_coeff_drag"
+           , value_ (fieldInputText "balloon_coeff_drag" view) ]
     hr_ []
     h4_ "Do you have a parachute?"
     p_ "If you don't, set these to 0."
@@ -115,13 +126,30 @@ formHtml view = do
            , id_ "sim-parachute_area"
            , value_ (fieldInputText "parachute_area" view) ]
     hr_ []
-    h4_ "Lastly, your payload."
+    h4_ "Now, your payload."
     formError (errors "package_coeff_drag" view)
     p_ "What is your payload's coefficient of drag?"
     input_ [ type_ "text"
            , name_ "sim.package_coeff_drag"
            , id_ "sim-package_coeff_drag"
-           , value_ (fieldInputText "package_coeff_drag" view) ]           
+           , value_ (fieldInputText "package_coeff_drag" view) ]
+    hr_ []
+    h4_ "Blown away by how cool this is?"
+    formError (errors "grib_url" view)
+    p_ $ do
+      "We need to where to get wind data from. In the future, this will be an "
+      "automatic process, but for now, we require a URL to GRIB data from "
+      "NOAA. Please grab the URL to a GRIB file from "
+      a_
+        [ href_ "http://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl" ]
+        "here"
+      " and paste it into the box."
+    p_ "Note: Only paste a URL, do not paste the GRIB data itself."
+    input_ [ type_ "text"
+           , name_ "sim.grib_url"
+           , id_ "sim-grib_url"
+           , value_ (fieldInputText "grib_url" view) ]
+    p_ "That's it!"
     input_ [ type_ "submit"
            , value_ "Run simulation"
            ]
