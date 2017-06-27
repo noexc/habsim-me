@@ -28,7 +28,7 @@ navbar =  do
          , id_ "navbarText"
          ] $ do
       ul_ [ class_ "navbar-nav mr-auto" ] $ do
-        navLink "https://github.com/kg4sgp/habsim-me" "source code"
+        navLink "https://github.com/noexc/habsim-me" "source code"
 
 template :: String -> Html () -> Html ()
 template title body =
