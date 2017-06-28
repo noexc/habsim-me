@@ -1,12 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Control.Monad.IO.Class
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.HABSim.Grib2.CSVParse.Types
 import qualified Data.HashMap.Lazy as HM
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Encoding as TE
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
+import qualified Database.Redis as R
 import Lucid
 import Lucid.Base
 import Network.HTTP.Client
@@ -30,27 +36,44 @@ getGrib url = do
   response <- httpLbs request manager
   tmp <- emptySystemTempFile "grib"
   tmpcsv <- emptySystemTempFile "grib.csv"
-  putStrLn tmp
-  putStrLn tmpcsv
   BL.writeFile tmp (responseBody response)
-  putStrLn "shelly"
   csv <- S.shelly . S.silently $
     S.run "wgrib2" [T.pack tmp, "-csv", T.pack tmpcsv]
-  putStrLn "back"
   out <- BL.readFile tmpcsv
-  putStrLn "readfile"
   removeFile tmp
   removeFile tmpcsv
-  putStrLn "ret"
   return out
 
-doSim :: SimForm -> ActionM ()
+doSim :: SimForm -> IO B.ByteString
 doSim sf = do
   grib <- liftIO $ getGrib (fGribUrl sf)
+  conn <- R.checkedConnect $ R.defaultConnectInfo {
+    R.connectHost = "habsim-redis"
+  }
   let gribLines = getGribLines grib
       simRes = runSim gribLines sf
-  html . renderText $ template "HABSim: Simulation Result" $
-    renderSim simRes
+  uuid <- UUID.toASCIIBytes <$> UUID.nextRandom
+  R.runRedis conn $ do
+    -- TODO: Do something if setnx -> false
+    R.setnx uuid (TE.encodeUtf8 simRes)
+    R.quit
+  return uuid
+
+recallSim :: B.ByteString -> ActionM ()
+recallSim uuid = do
+  conn <- liftIO . R.checkedConnect $ R.defaultConnectInfo {
+    R.connectHost = "habsim-redis"
+  }
+  simMay <- liftIO . R.runRedis conn $ do
+    simRes <- R.get uuid
+    R.quit
+    return simRes
+  case simMay of
+    Left _ -> raise "Error while talking to redis"
+    Right (Just simRes) ->
+      html . renderText $ template "HABSim: Simulation Result" $
+        renderSim (TE.decodeUtf8 simRes)
+    Right Nothing -> raise "UUID Not found"
 
 formTemplate :: View T.Text -> ActionM ()
 formTemplate view =
@@ -72,5 +95,10 @@ main = scotty 3000 $ do
   post "/sim" $ do
     (view, result) <- runForm "sim" simForm
     case result of
-      Just sf -> doSim sf
+      Just sf -> do
+        x <- liftIO $ doSim sf
+        void . redirect . TL.fromStrict . TE.decodeUtf8 $ x
       _ -> formTemplate view
+  get "/:uuid" $ do
+    uuid <- param "uuid"
+    recallSim uuid
