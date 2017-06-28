@@ -16,7 +16,8 @@ executable habsim-me
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base >= 4 && < 5
+  build-depends:       aeson >= 1 && < 2
+                     , base >= 4 && < 5
                      , bytestring >= 0.9 && < 1
                      , digestive-functors >= 0.8 && < 0.9
                      --, digestive-functors-lucid >= 0.0.0.4 && < 1

@@ -81,10 +81,14 @@ toJSArray (lastAscent, accAscent) (lastDescent, accDescent) =
   (T.intercalate "," . map jsonLatLon . D.toList $ accDescent) <>
   "," <> jsonLatLon lastDescent <> "];"
 
-renderSim :: T.Text -> Html ()
-renderSim js = do
-    div_ [ id_ "map", style_ "width: 100%; height: 100%;" ] ""
-    script_ [ type_"text/javascript" ] (toHtmlRaw $ gmapJS js)
+renderSim :: T.Text -> Maybe SimForm -> Html ()
+renderSim js sf = do
+  case sf of
+    Just sf' ->
+      span_ [ id_ "inputs" ] (toHtml $ show sf')
+    Nothing -> mempty
+  div_ [ id_ "map", style_ "width: 100%; height: 100%;" ] ""
+  script_ [ type_"text/javascript" ] (toHtmlRaw $ gmapJS js)
 
 {-
 gmapTemplate :: Html ()

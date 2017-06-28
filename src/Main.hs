@@ -3,10 +3,12 @@ module Main where
 
 import Control.Monad (when, void)
 import Control.Monad.IO.Class
+import Data.Aeson
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.HABSim.Grib2.CSVParse.Types
 import qualified Data.HashMap.Lazy as HM
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Encoding as TE
@@ -56,6 +58,7 @@ doSim sf = do
   R.runRedis conn $ do
     -- TODO: Do something if setnx -> false
     R.setnx uuid (TE.encodeUtf8 simRes)
+    R.setnx (uuid <> ".input") (BL.toStrict . encode $ sf)
     R.quit
   return uuid
 
@@ -66,14 +69,20 @@ recallSim uuid = do
   }
   simMay <- liftIO . R.runRedis conn $ do
     simRes <- R.get uuid
+    simInput <- R.get (uuid <> ".input")
     R.quit
-    return simRes
+    return (simRes, simInput)
   case simMay of
-    Left _ -> raise "Error while talking to redis"
-    Right (Just simRes) ->
+    (Left _, _) -> raise "Error while talking to redis"
+    (Right (Just simRes), simInputs) ->
       html . renderText $ template "HABSim: Simulation Result" $
-        renderSim (TE.decodeUtf8 simRes)
-    Right Nothing -> raise "UUID Not found"
+        renderSim (TE.decodeUtf8 simRes) (decodeDontCare simInputs)
+    (Right Nothing, _) -> raise "UUID Not found"
+
+decodeDontCare :: Either R.Reply (Maybe B.ByteString) -> Maybe SimForm
+decodeDontCare (Left _) = Nothing
+decodeDontCare (Right Nothing) = Nothing
+decodeDontCare (Right (Just s)) = decode . BL.fromStrict $ s
 
 formTemplate :: View T.Text -> ActionM ()
 formTemplate view =
