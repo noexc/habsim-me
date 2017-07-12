@@ -76,10 +76,13 @@ toJSArray
 toJSArray (lastAscent, accAscent) (lastDescent, accDescent) =
   "var burst_point = " <> jsonLatLon lastAscent <> ";" <>
   "var flight_path = [" <>
-  (T.intercalate "," . map jsonLatLon . D.toList $ accAscent) <>
-  "," <> jsonLatLon lastAscent <>  "," <>
-  (T.intercalate "," . map jsonLatLon . D.toList $ accDescent) <>
-  "," <> jsonLatLon lastDescent <> "];"
+  (affixComma . T.intercalate "," . map jsonLatLon . D.toList $ accAscent) <>
+  jsonLatLon lastAscent <>  "," <>
+  (affixComma . T.intercalate "," . map jsonLatLon . D.toList $ accDescent) <>
+  jsonLatLon lastDescent <> "];"
+  where
+    affixComma "" = ""
+    affixComma x = x <> ","
 
 renderSim :: T.Text -> Maybe SimForm -> Html ()
 renderSim js sf = do
